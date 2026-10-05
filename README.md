@@ -80,6 +80,14 @@ kernel keeps the TSC, and from that point on every core agrees. If the sync
 fails for any reason the unit switches the kernel to HPET, so the failure mode
 is "slow but correct", never "broken time".
 
+`tscsync-resume.service` runs the same `tscsync --apply` after every resume from
+suspend or hibernation. Hibernation and S3 (`deep`) suspend wake
+up through the firmware, which can leave one or more cores' TSCs behind again.
+s2idle does not redo CPU start-up, so the resume unit should detect every core
+in sync; TSC is still checked and synced if a desync occurs.
+Same HPET fallback as the boot unit. Check which suspend mode you use with
+`cat /sys/power/mem_sleep` (the bracketed entry is active).
+
 Verified across reboots: `clocksource tsc`, all cores within ~1000 cycles,
 `clock_gettime` 18 ns, chrony quiet, GE-Proton 11-7 games fixed.
 
@@ -108,6 +116,10 @@ tscsync --measure                                                       # every 
 journalctl -u tscsync -b                                                # "cpu0 pass 1: off=..." -> "in sync"
 journalctl -u chronyd -b | grep -E "stepped|wrong by"                   # small or none
 
+sudo systemctl suspend                                                  # or hibernate; after waking:
+journalctl -u tscsync-resume -b                                         # one run per resume, no FAILED
+tscsync --measure                                                       # every row ~0 again
+
 sudo sh uninstall.sh      # revert everything, then reboot
 ```
 
@@ -122,6 +134,7 @@ on. Backups of `/boot/loader/entries/*.conf` and `/etc/default/grub` go to
 |---|---|
 | `tscsync.c` | the tool: `--measure` (read-only), `--apply [--quiet]` (writes MSR) |
 | `tscsync.service` | early-boot oneshot unit with HPET fallback |
+| `tscsync-resume.service` | re-sync after every resume from suspend/hibernate, same fallback |
 | `msr.conf` | `/etc/modules-load.d/` entry so `/dev/cpu/N/msr` exist |
 | `install.sh` / `uninstall.sh` | install with preflight + backup / full revert |
 | `diag/clk.c` | cost of one `clock_gettime` call |
@@ -129,10 +142,10 @@ on. Backups of `/boot/loader/entries/*.conf` and `/etc/default/grub` go to
 
 ## Not covered
 
-- **Hibernate**: resumes through firmware, so the offset comes back and the
-  unit does not re-run. Run `sudo tscsync --apply` after resume, or add a unit
-  ordered `After=hibernate.target`. s2idle suspend was tested and does *not*
-  reintroduce the offset.
+- **The moment after resume**: between wake-up and `tscsync-resume.service`
+  running, any core(s) the firmware left behind are still out of sync.
+  The kernel's timekeeping and any program reading the TSC in this time-window
+  will still see the TSC desync, so the clock can jump. NTP corrects this later.
 - **Firmware fix**: none known. A Legion Pro 5 owner reported the warp
   persisting after a BIOS update. Lenovo does not publish these through LVFS.
 

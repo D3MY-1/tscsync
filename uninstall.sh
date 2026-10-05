@@ -5,8 +5,8 @@ set -u
 echo "== kernel argument"
 grubby --remove-args="tsc=reliable" --update-kernel=ALL
 echo "== unit"
-systemctl disable tscsync.service 2>/dev/null
-rm -f /etc/systemd/system/tscsync.service /etc/modules-load.d/msr.conf
+systemctl disable tscsync.service tscsync-resume.service 2>/dev/null
+rm -f /etc/systemd/system/tscsync.service /etc/systemd/system/tscsync-resume.service /etc/modules-load.d/msr.conf
 systemctl daemon-reload
 echo "== tool"
 rm -f /usr/local/sbin/tscsync

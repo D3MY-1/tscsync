@@ -1,0 +1,17 @@
+[Unit]
+Description=Re-synchronise CPU time-stamp counters after resume from suspend or hibernation
+Documentation=file:/usr/local/src/tscsync/tscsync.c
+# Resuming from S3 ("deep") suspend or hibernation goes through firmware, which re-introduces
+# the offset.
+After=suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
+ConditionPathExists=/usr/local/sbin/tscsync
+
+[Service]
+Type=oneshot
+ExecStartPre=-/sbin/modprobe msr
+ExecStart=/usr/local/sbin/tscsync --apply --quiet
+# Same fallback as tscsync.service
+ExecStopPost=/bin/sh -c 'if [ "$SERVICE_RESULT" != success ]; then echo hpet > /sys/devices/system/clocksource/clocksource0/current_clocksource && echo "tscsync FAILED ($SERVICE_RESULT/$EXIT_STATUS); switched clocksource to hpet"; fi'
+
+[Install]
+WantedBy=suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
